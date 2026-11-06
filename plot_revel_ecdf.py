@@ -19,12 +19,14 @@ mpl.rcParams["font.family"] = "Arial"
 mpl.rcParams["pdf.fonttype"] = 42
 
 # ── paths ──────────────────────────────────────────────────────────────────────
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.abspath(__file__))
 PATH_PATHO = os.path.join(BASE, "input", "clinvar_pathogenic_missense_spliceai_revel.tsv")
 PATH_VUS   = os.path.join(BASE, "input", "clinvar_spiceai_filtered05_revel.tsv")
 OUT_PLOT   = os.path.join(BASE, "output", "revel_density_pathogenic_vs_vus.png")
 OUT_STATS  = os.path.join(BASE, "output", "revel_stats_pathogenic_vs_vus.tsv")
-REVEL_THR  = 0.644  # ClinVar/ACMG BP4 recommended cutoff
+os.makedirs(os.path.join(BASE, "output"), exist_ok=True)
+REVEL_THR_PP3 = 0.644  # ClinGen SVI PP3 recommended cutoff
+REVEL_THR_BP4 = 0.29   # ClinGen SVI BP4 recommended cutoff
 
 # ── load & filter pathogenic ───────────────────────────────────────────────────
 patho = pd.read_csv(PATH_PATHO, sep="\t", dtype=str)
@@ -67,8 +69,8 @@ def group_stats(name, series, thr):
     }
 
 stat_rows = [
-    group_stats("Pathogenic_SpliceAI>0.5", revel_patho, REVEL_THR),
-    group_stats("VUS_SpliceAI>0.5",        revel_vus,   REVEL_THR),
+    group_stats("Pathogenic_SpliceAI>0.5", revel_patho, REVEL_THR_PP3),
+    group_stats("VUS_SpliceAI>0.5",        revel_vus,   REVEL_THR_PP3),
 ]
 
 # Mann-Whitney U test
@@ -76,7 +78,7 @@ U, pval = mannwhitneyu(revel_patho, revel_vus, alternative="two-sided")
 print(f"\nMann-Whitney U = {U:.1f}, p = {pval:.3e}")
 
 stats_df = pd.DataFrame(stat_rows)
-stats_df["REVEL_threshold"] = REVEL_THR
+stats_df["REVEL_threshold"] = REVEL_THR_PP3
 stats_df["mannwhitney_U"]   = round(U, 1)
 stats_df["mannwhitney_p"]   = f"{pval:.3e}"
 stats_df.to_csv(OUT_STATS, sep="\t", index=False)
@@ -90,27 +92,30 @@ kde_p = gaussian_kde(revel_patho, bw_method=0.12)
 kde_v = gaussian_kde(revel_vus,   bw_method=0.12)
 
 # ── plot ───────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(9, 6))
 
 ax.fill_between(x_grid, kde_p(x_grid), alpha=0.25, color="#d62728")
-ax.plot(x_grid, kde_p(x_grid), color="#d62728", linewidth=2.0,
+ax.plot(x_grid, kde_p(x_grid), color="#d62728", linewidth=2.2,
         label=f"Pathogenic (SpliceAI>0.5, n={len(revel_patho):,})")
 
 ax.fill_between(x_grid, kde_v(x_grid), alpha=0.25, color="#1f77b4")
-ax.plot(x_grid, kde_v(x_grid), color="#1f77b4", linewidth=2.0,
+ax.plot(x_grid, kde_v(x_grid), color="#1f77b4", linewidth=2.2,
         label=f"VUS (SpliceAI>0.5, n={len(revel_vus):,})")
 
-ax.axvline(REVEL_THR, color="grey", linestyle="--", linewidth=1.2, alpha=0.8,
-           label=f"REVEL = {REVEL_THR} (BP4 cutoff)")
+ax.axvline(REVEL_THR_PP3, color="#2ca02c", linestyle="--", linewidth=1.5,
+           label=f"REVEL = {REVEL_THR_PP3} (PP3 cutoff)")
+ax.axvline(REVEL_THR_BP4, color="#ff7f0e", linestyle="--", linewidth=1.5,
+           label=f"REVEL = {REVEL_THR_BP4} (BP4 cutoff)")
 
-ax.set_xlabel("REVEL score", fontsize=12)
-ax.set_ylabel("Density", fontsize=12)
-ax.set_title("REVEL score distribution\n(Pathogenic vs VUS, SpliceAI > 0.5)", fontsize=13)
+ax.set_xlabel("REVEL score", fontsize=14)
+ax.set_ylabel("Density", fontsize=14)
+ax.set_title("REVEL score distribution\n(Pathogenic vs VUS, SpliceAI > 0.5)", fontsize=15)
 ax.set_xlim(0, 1)
+ax.tick_params(axis="both", labelsize=12)
 ax.xaxis.set_minor_locator(mticker.MultipleLocator(0.05))
 ax.grid(True, which="major", linestyle="-",  alpha=0.3)
 ax.grid(True, which="minor", linestyle=":",  alpha=0.15)
-ax.legend(fontsize=10, loc="upper left")
+ax.legend(fontsize=12, loc="upper left")
 
 plt.tight_layout()
 plt.savefig(OUT_PLOT, dpi=150)
